@@ -1,4 +1,4 @@
-name: Filter JP SG IPs 
+name: Filter JP IPs 
 
 on:
   workflow_dispatch:  # 手动触发
@@ -26,21 +26,17 @@ jobs:
         curl -s "https://zip.cm.edu.kg/all.txt" -o raw_ips.txt
         echo "Total IPs fetched: $(wc -l < raw_ips.txt)"
 
-    - name: Filter SG/JP IPs with port 443 only
+    - name: Filter JP IPs with port 443 only
       run: |
-        # 分别获取JP和SG的IP
+        # 获取JP的IP
         grep -E "(JP)" raw_ips.txt | grep ":443#" | sed 's/:443#.*//' > jp_ips.txt
-        grep -E "(SG)" raw_ips.txt | grep ":443#" | sed 's/:443#.*//' > sg_ips.txt
         
         echo "JP IPs found: $(wc -l < jp_ips.txt)"
-        echo "SG IPs found: $(wc -l < sg_ips.txt)"
         
         # 如果IP太多，只取前100个测试
         head -100 jp_ips.txt > jp_ips_limited.txt
-        head -100 sg_ips.txt > sg_ips_limited.txt
         mv jp_ips_limited.txt jp_ips.txt
-        mv sg_ips_limited.txt sg_ips.txt
-        echo "Limited to first 100 IPs per country for testing"
+        echo "Limited to first 100 IPs for testing"
 
     - name: Check IPs with external API and select fastest
       run: |
@@ -79,66 +75,20 @@ jobs:
           done < jp_ips.txt
         fi
         
-        # 检查SG IPs - 收集所有有效的IP和响应时间
-        touch sg_all_valid.txt
-        if [ -s sg_ips.txt ]; then
-          sg_total=$(wc -l < sg_ips.txt)
-          sg_count=0
-          sg_valid=0
-          
-          while IFS= read -r ip; do
-            sg_count=$((sg_count + 1))
-            echo "[SG $sg_count/$sg_total] Testing $ip..."
-            
-            # 设置超时时间
-            response=$(timeout 5s curl -s "https://ip.kkki.qzz.io/check?proxyip=$ip" 2>/dev/null || echo "timeout")
-            
-            if [ "$response" != "timeout" ]; then
-              if echo "$response" | jq -e '.success == true' >/dev/null 2>&1; then
-                response_time=$(echo "$response" | jq -r '.responseTime' | grep -Eo '[0-9]+' || echo "9999")
-                echo "  ✓ Valid SG IP, response time: ${response_time}ms"
-                echo "$ip $response_time" >> sg_all_valid.txt
-                sg_valid=$((sg_valid + 1))
-              else
-                echo "  ✗ SG IP discarded (success not true)"
-              fi
-            else
-              echo "  ✗ SG IP discarded (timeout)"
-            fi
-            
-            # 每5个请求休息一下
-            if [ $((sg_count % 5)) -eq 0 ]; then
-              sleep 0.5
-            fi
-            
-          done < sg_ips.txt
-        fi
+        # 选择JP中延迟最低的10个IP
+        echo "Selecting fastest 10 JP IPs..."
+        sort -n -k2 jp_all_valid.txt | head -10 | cut -d' ' -f1 > filtered_ips.txt
         
-        # 分别选择JP和SG中延迟最低的5个IP
-        echo "Selecting fastest 5 JP IPs..."
-        sort -n -k2 jp_all_valid.txt | head -5 | cut -d' ' -f1 > valid_jp_ips.txt
-        echo "Fastest 5 JP IPs:"
-        cat valid_jp_ips.txt
-        
-        echo "Selecting fastest 5 SG IPs..."
-        sort -n -k2 sg_all_valid.txt | head -5 | cut -d' ' -f1 > valid_sg_ips.txt
-        echo "Fastest 5 SG IPs:"
-        cat valid_sg_ips.txt
-        
-        # 合并结果，总共10个IP
-        cat valid_jp_ips.txt valid_sg_ips.txt > filtered_ips.txt
-        
-        echo "Final selected IPs (5 fastest JP + 5 fastest SG):"
+        echo "Fastest 10 JP IPs:"
         cat filtered_ips.txt
+        
         echo -e "\nFinal IP count: $(wc -l < filtered_ips.txt)"
 
     - name: Display filtered IPs
       run: |
-        echo "Filtered IP addresses (5 fastest JP + 5 fastest SG):"
+        echo "Filtered IP addresses (10 fastest JP):"
         cat filtered_ips.txt
         echo -e "\nTotal IPs: $(wc -l < filtered_ips.txt)"
-        echo "JP IPs: $(grep -c . valid_jp_ips.txt 2>/dev/null || echo 0)"
-        echo "SG IPs: $(grep -c . valid_sg_ips.txt 2>/dev/null || echo 0)"
 
     - name: Commit and push if changed
       run: |
@@ -147,7 +97,7 @@ jobs:
         
         if [ -n "$(git status --porcelain filtered_ips.txt)" ]; then
           git add filtered_ips.txt
-          git commit -m "Update filtered JP/SG IP list (5 fastest JP + 5 fastest SG) $(date '+%Y-%m-%d %H:%M:%S')"
+          git commit -m "Update filtered JP IP list (10 fastest JP) $(date '+%Y-%m-%d %H:%M:%S')"
           git push origin HEAD:${{ github.ref_name }}
           echo "Changes committed and pushed"
         else
