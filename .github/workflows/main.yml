@@ -1,0 +1,94 @@
+name: Filter JP IPs 
+
+on:
+  workflow_dispatch:  # 手动触发
+  schedule:
+    - cron: '0 1 * * *'  # 每天 时间 9 点运行
+
+jobs:
+  filter-ips:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30  # 设置整个job的超时时间
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Install jq for JSON parsing
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y jq
+
+    - name: Fetch IP list
+      run: |
+        curl -s "https://zip.cm.edu.kg/all.txt" -o raw_ips.txt
+
+    - name: Filter SG/JP/HK IPs with port 443 only
+      run: |
+        # 只保留包含 SG/JP 且端口为 443 的行，然后提取 IP
+        grep -E "(JP)" raw_ips.txt | \
+        grep ":443#" | \
+        sed 's/:443#.*//' > filtered_ips.txt
+
+    - name: Check IPs with external API
+      run: |
+        # 创建临时文件存放有效IP
+        touch valid_ips.txt
+        
+        # 获取总IP数量
+        total_ips=$(wc -l < filtered_ips.txt)
+        current=0
+        
+        # 遍历每个IP进行外部API检测
+        while IFS= read -r ip; do
+          current=$((current + 1))
+          echo "[$current/$total_ips] Testing $ip..."
+          
+          # 使用curl检测IP，使用jq解析JSON检查"success": true
+          response=$(curl -s --max-time 10 "https://ip.kkki.qzz.io/check?proxyip=$ip" 2>/dev/null)
+          curl_exit_code=$?
+          
+          if [ $curl_exit_code -eq 0 ]; then
+            # 使用jq检查JSON中的success字段是否为true
+            if echo "$response" | jq -e '.success == true' >/dev/null 2>&1; then
+              echo "$ip" >> valid_ips.txt
+              echo "  ✓ IP added to valid list (success: true)"
+            else
+              echo "  ✗ IP discarded (success not true or JSON invalid)"
+              echo "    API response: $response"
+            fi
+          else
+            echo "  ✗ IP discarded (curl failed: $curl_exit_code)"
+          fi
+          
+          # 每检测20个IP休息1秒，避免请求过于频繁
+          if [ $((current % 20)) -eq 0 ]; then
+            sleep 1
+          fi
+          
+        done < filtered_ips.txt
+        
+        # 用有效IP替换原文件
+        mv valid_ips.txt filtered_ips.txt
+
+    - name: Display filtered IPs
+      run: |
+        echo "Filtered IP addresses (443 port only):"
+        cat filtered_ips.txt
+        echo -e "\nTotal IPs: $(wc -l < filtered_ips.txt)"
+
+    - name: Commit and push if changed
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        
+        if [ -n "$(git status --porcelain filtered_ips.txt)" ]; then
+          git add filtered_ips.txt
+          git commit -m "Update filtered IP list (443 port only) $(date '+%Y-%m-%d %H:%M:%S')"
+          git push origin HEAD:${{ github.ref_name }}
+          echo "Changes committed and pushed"
+        else
+          echo "No changes to commit"
+        fi
