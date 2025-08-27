@@ -34,16 +34,18 @@ jobs:
         echo "JP IPs found: $(wc -l < jp_ips.txt)"
         echo "SG IPs found: $(wc -l < sg_ips.txt)"
 
-    - name: Check IPs with external API
+    - name: Check IPs with external API and select fastest
       run: |
+        # 初始化最快IP数组
+        fastest_jp_ips=()
+        fastest_jp_times=()
+        
         # 检查JP IPs
-        touch valid_jp_ips.txt
         if [ -s jp_ips.txt ]; then
           jp_total=$(wc -l < jp_ips.txt)
           jp_count=0
-          jp_valid=0
           
-          while IFS= read -r ip && [ $jp_valid -lt 5 ]; do
+          while IFS= read -r ip; do
             jp_count=$((jp_count + 1))
             echo "[JP $jp_count/$jp_total] Testing $ip..."
             
@@ -52,9 +54,32 @@ jobs:
             
             if [ $curl_exit_code -eq 0 ]; then
               if echo "$response" | jq -e '.success == true' >/dev/null 2>&1; then
-                echo "$ip" >> valid_jp_ips.txt
-                jp_valid=$((jp_valid + 1))
-                echo "  ✓ JP IP added ($jp_valid/5)"
+                response_time=$(echo "$response" | jq -r '.responseTime' | grep -Eo '[0-9]+' || echo "9999")
+                echo "  ✓ Valid JP IP, response time: ${response_time}ms"
+                
+                # 如果数组未满5个，直接添加
+                if [ ${#fastest_jp_ips[@]} -lt 5 ]; then
+                  fastest_jp_ips+=("$ip")
+                  fastest_jp_times+=("$response_time")
+                  echo "  Added to JP list (${#fastest_jp_ips[@]}/5)"
+                else
+                  # 找到当前数组中最慢的IP
+                  max_time=0
+                  max_index=0
+                  for i in "${!fastest_jp_times[@]}"; do
+                    if [ "${fastest_jp_times[$i]}" -gt "$max_time" ]; then
+                      max_time="${fastest_jp_times[$i]}"
+                      max_index=$i
+                    fi
+                  done
+                  
+                  # 如果当前IP比最慢的IP快，替换它
+                  if [ "$response_time" -lt "$max_time" ]; then
+                    fastest_jp_ips[$max_index]="$ip"
+                    fastest_jp_times[$max_index]="$response_time"
+                    echo "  Replaced slower JP IP (${max_time}ms -> ${response_time}ms)"
+                  fi
+                fi
               else
                 echo "  ✗ JP IP discarded (success not true)"
               fi
@@ -69,14 +94,16 @@ jobs:
           done < jp_ips.txt
         fi
         
+        # 初始化最快SG IP数组
+        fastest_sg_ips=()
+        fastest_sg_times=()
+        
         # 检查SG IPs
-        touch valid_sg_ips.txt
         if [ -s sg_ips.txt ]; then
           sg_total=$(wc -l < sg_ips.txt)
           sg_count=0
-          sg_valid=0
           
-          while IFS= read -r ip && [ $sg_valid -lt 5 ]; do
+          while IFS= read -r ip; do
             sg_count=$((sg_count + 1))
             echo "[SG $sg_count/$sg_total] Testing $ip..."
             
@@ -85,9 +112,32 @@ jobs:
             
             if [ $curl_exit_code -eq 0 ]; then
               if echo "$response" | jq -e '.success == true' >/dev/null 2>&1; then
-                echo "$ip" >> valid_sg_ips.txt
-                sg_valid=$((sg_valid + 1))
-                echo "  ✓ SG IP added ($sg_valid/5)"
+                response_time=$(echo "$response" | jq -r '.responseTime' | grep -Eo '[0-9]+' || echo "9999")
+                echo "  ✓ Valid SG IP, response time: ${response_time}ms"
+                
+                # 如果数组未满5个，直接添加
+                if [ ${#fastest_sg_ips[@]} -lt 5 ]; then
+                  fastest_sg_ips+=("$ip")
+                  fastest_sg_times+=("$response_time")
+                  echo "  Added to SG list (${#fastest_sg_ips[@]}/5)"
+                else
+                  # 找到当前数组中最慢的IP
+                  max_time=0
+                  max_index=0
+                  for i in "${!fastest_sg_times[@]}"; do
+                    if [ "${fastest_sg_times[$i]}" -gt "$max_time" ]; then
+                      max_time="${fastest_sg_times[$i]}"
+                      max_index=$i
+                    fi
+                  done
+                  
+                  # 如果当前IP比最慢的IP快，替换它
+                  if [ "$response_time" -lt "$max_time" ]; then
+                    fastest_sg_ips[$max_index]="$ip"
+                    fastest_sg_times[$max_index]="$response_time"
+                    echo "  Replaced slower SG IP (${max_time}ms -> ${response_time}ms)"
+                  fi
+                fi
               else
                 echo "  ✗ SG IP discarded (success not true)"
               fi
@@ -102,14 +152,30 @@ jobs:
           done < sg_ips.txt
         fi
         
+        # 保存最快的JP IPs
+        > valid_jp_ips.txt
+        for ip in "${fastest_jp_ips[@]}"; do
+          echo "$ip" >> valid_jp_ips.txt
+        done
+        
+        # 保存最快的SG IPs
+        > valid_sg_ips.txt
+        for ip in "${fastest_sg_ips[@]}"; do
+          echo "$ip" >> valid_sg_ips.txt
+        done
+        
         # 合并结果，确保总共10个IP
         cat valid_jp_ips.txt valid_sg_ips.txt | head -10 > filtered_ips.txt
         
-        echo "Final IP count: $(wc -l < filtered_ips.txt)"
+        echo "Final fastest IPs selected:"
+        echo "JP IPs (response times): ${fastest_jp_times[@]}"
+        echo "SG IPs (response times): ${fastest_sg_times[@]}"
+        cat filtered_ips.txt
+        echo -e "\nFinal IP count: $(wc -l < filtered_ips.txt)"
 
     - name: Display filtered IPs
       run: |
-        echo "Filtered IP addresses (443 port only):"
+        echo "Filtered IP addresses (443 port only, fastest):"
         cat filtered_ips.txt
         echo -e "\nTotal IPs: $(wc -l < filtered_ips.txt)"
         echo "JP IPs: $(grep -c . valid_jp_ips.txt 2>/dev/null || echo 0)"
@@ -122,7 +188,7 @@ jobs:
         
         if [ -n "$(git status --porcelain filtered_ips.txt)" ]; then
           git add filtered_ips.txt
-          git commit -m "Update filtered JP/SG IP list (10 IPs max) $(date '+%Y-%m-%d %H:%M:%S')"
+          git commit -m "Update filtered JP/SG IP list (10 fastest IPs) $(date '+%Y-%m-%d %H:%M:%S')"
           git push origin HEAD:${{ github.ref_name }}
           echo "Changes committed and pushed"
         else
