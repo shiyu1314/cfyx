@@ -36,11 +36,8 @@ jobs:
 
     - name: Check IPs with external API and select fastest
       run: |
-        # 初始化最快IP数组
-        fastest_jp_ips=()
-        fastest_jp_times=()
-        
-        # 检查JP IPs
+        # 检查JP IPs - 收集所有有效的并选择最快的5个
+        touch jp_results.txt
         if [ -s jp_ips.txt ]; then
           jp_total=$(wc -l < jp_ips.txt)
           jp_count=0
@@ -54,32 +51,9 @@ jobs:
             
             if [ $curl_exit_code -eq 0 ]; then
               if echo "$response" | jq -e '.success == true' >/dev/null 2>&1; then
-                response_time=$(echo "$response" | jq -r '.responseTime' | grep -Eo '[0-9]+' || echo "9999")
+                response_time=$(echo "$response" | jq -r '.responseTime // empty' | grep -Eo '[0-9]+' || echo "9999")
                 echo "  ✓ Valid JP IP, response time: ${response_time}ms"
-                
-                # 如果数组未满5个，直接添加
-                if [ ${#fastest_jp_ips[@]} -lt 5 ]; then
-                  fastest_jp_ips+=("$ip")
-                  fastest_jp_times+=("$response_time")
-                  echo "  Added to JP list (${#fastest_jp_ips[@]}/5)"
-                else
-                  # 找到当前数组中最慢的IP
-                  max_time=0
-                  max_index=0
-                  for i in "${!fastest_jp_times[@]}"; do
-                    if [ "${fastest_jp_times[$i]}" -gt "$max_time" ]; then
-                      max_time="${fastest_jp_times[$i]}"
-                      max_index=$i
-                    fi
-                  done
-                  
-                  # 如果当前IP比最慢的IP快，替换它
-                  if [ "$response_time" -lt "$max_time" ]; then
-                    fastest_jp_ips[$max_index]="$ip"
-                    fastest_jp_times[$max_index]="$response_time"
-                    echo "  Replaced slower JP IP (${max_time}ms -> ${response_time}ms)"
-                  fi
-                fi
+                echo "$ip $response_time" >> jp_results.txt
               else
                 echo "  ✗ JP IP discarded (success not true)"
               fi
@@ -94,11 +68,8 @@ jobs:
           done < jp_ips.txt
         fi
         
-        # 初始化最快SG IP数组
-        fastest_sg_ips=()
-        fastest_sg_times=()
-        
-        # 检查SG IPs
+        # 检查SG IPs - 收集所有有效的并选择最快的5个
+        touch sg_results.txt
         if [ -s sg_ips.txt ]; then
           sg_total=$(wc -l < sg_ips.txt)
           sg_count=0
@@ -112,32 +83,9 @@ jobs:
             
             if [ $curl_exit_code -eq 0 ]; then
               if echo "$response" | jq -e '.success == true' >/dev/null 2>&1; then
-                response_time=$(echo "$response" | jq -r '.responseTime' | grep -Eo '[0-9]+' || echo "9999")
+                response_time=$(echo "$response" | jq -r '.responseTime // empty' | grep -Eo '[0-9]+' || echo "9999")
                 echo "  ✓ Valid SG IP, response time: ${response_time}ms"
-                
-                # 如果数组未满5个，直接添加
-                if [ ${#fastest_sg_ips[@]} -lt 5 ]; then
-                  fastest_sg_ips+=("$ip")
-                  fastest_sg_times+=("$response_time")
-                  echo "  Added to SG list (${#fastest_sg_ips[@]}/5)"
-                else
-                  # 找到当前数组中最慢的IP
-                  max_time=0
-                  max_index=0
-                  for i in "${!fastest_sg_times[@]}"; do
-                    if [ "${fastest_sg_times[$i]}" -gt "$max_time" ]; then
-                      max_time="${fastest_sg_times[$i]}"
-                      max_index=$i
-                    fi
-                  done
-                  
-                  # 如果当前IP比最慢的IP快，替换它
-                  if [ "$response_time" -lt "$max_time" ]; then
-                    fastest_sg_ips[$max_index]="$ip"
-                    fastest_sg_times[$max_index]="$response_time"
-                    echo "  Replaced slower SG IP (${max_time}ms -> ${response_time}ms)"
-                  fi
-                fi
+                echo "$ip $response_time" >> sg_results.txt
               else
                 echo "  ✗ SG IP discarded (success not true)"
               fi
@@ -152,30 +100,32 @@ jobs:
           done < sg_ips.txt
         fi
         
-        # 保存最快的JP IPs
-        > valid_jp_ips.txt
-        for ip in "${fastest_jp_ips[@]}"; do
-          echo "$ip" >> valid_jp_ips.txt
-        done
+        # 选择最快的JP IPs (最多5个)
+        touch valid_jp_ips.txt
+        if [ -s jp_results.txt ]; then
+          sort -n -k2 jp_results.txt | head -5 | cut -d' ' -f1 > valid_jp_ips.txt
+          echo "Fastest JP IPs selected:"
+          sort -n -k2 jp_results.txt | head -5
+        fi
         
-        # 保存最快的SG IPs
-        > valid_sg_ips.txt
-        for ip in "${fastest_sg_ips[@]}"; do
-          echo "$ip" >> valid_sg_ips.txt
-        done
+        # 选择最快的SG IPs (最多5个)
+        touch valid_sg_ips.txt
+        if [ -s sg_results.txt ]; then
+          sort -n -k2 sg_results.txt | head -5 | cut -d' ' -f1 > valid_sg_ips.txt
+          echo "Fastest SG IPs selected:"
+          sort -n -k2 sg_results.txt | head -5
+        fi
         
         # 合并结果，确保总共10个IP
         cat valid_jp_ips.txt valid_sg_ips.txt | head -10 > filtered_ips.txt
         
         echo "Final fastest IPs selected:"
-        echo "JP IPs (response times): ${fastest_jp_times[@]}"
-        echo "SG IPs (response times): ${fastest_sg_times[@]}"
         cat filtered_ips.txt
         echo -e "\nFinal IP count: $(wc -l < filtered_ips.txt)"
 
     - name: Display filtered IPs
       run: |
-        echo "Filtered IP addresses (443 port only, fastest):"
+        echo "Filtered IP addresses (443 port only, fastest first):"
         cat filtered_ips.txt
         echo -e "\nTotal IPs: $(wc -l < filtered_ips.txt)"
         echo "JP IPs: $(grep -c . valid_jp_ips.txt 2>/dev/null || echo 0)"
