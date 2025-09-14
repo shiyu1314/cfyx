@@ -1,0 +1,105 @@
+name: Filter JP IPs 
+
+on:
+  schedule:
+    - cron: '*/60 * * * *'  
+  workflow_dispatch:            
+  
+jobs:
+  filter-ips:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Install jq for JSON parsing
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y jq
+
+    - name: Fetch IP list
+      run: |
+        curl -s "https://zip.cm.edu.kg/all.txt" -o raw_ips.txt
+        echo "Total IPs fetched: $(wc -l < raw_ips.txt)"
+
+    - name: Filter JP IPs with port 443 only
+      run: |
+        # 获取JP的IP
+        grep -E "(JP)" raw_ips.txt | grep ":443#" | sed 's/:443#.*//' > jp_ips.txt
+        
+        echo "JP IPs found: $(wc -l < jp_ips.txt)"
+        
+        # 如果IP太多，只取前100个测试
+        head -100 jp_ips.txt > jp_ips_limited.txt
+        mv jp_ips_limited.txt jp_ips.txt
+        echo "Limited to first 100 IPs for testing"
+
+    - name: Check IPs with external API and select fastest
+      run: |
+        # 检查JP IPs - 收集所有有效的IP和响应时间
+        touch jp_all_valid.txt
+        if [ -s jp_ips.txt ]; then
+          jp_total=$(wc -l < jp_ips.txt)
+          jp_count=0
+          jp_valid=0
+          
+          while IFS= read -r ip; do
+            jp_count=$((jp_count + 1))
+            echo "[JP $jp_count/$jp_total] Testing $ip..."
+            
+            # 设置超时时间
+            response=$(timeout 5s curl -s "https://ip.kkki.qzz.io/check?proxyip=$ip" 2>/dev/null || echo "timeout")
+            
+            if [ "$response" != "timeout" ]; then
+              if echo "$response" | jq -e '.success == true' >/dev/null 2>&1; then
+                response_time=$(echo "$response" | jq -r '.responseTime' | grep -Eo '[0-9]+' || echo "9999")
+                echo "  ✓ Valid JP IP, response time: ${response_time}ms"
+                echo "$ip $response_time" >> jp_all_valid.txt
+                jp_valid=$((jp_valid + 1))
+              else
+                echo "  ✗ JP IP discarded (success not true)"
+              fi
+            else
+              echo "  ✗ JP IP discarded (timeout)"
+            fi
+            
+            # 每5个请求休息一下
+            if [ $((jp_count % 5)) -eq 0 ]; then
+              sleep 0.5
+            fi
+            
+          done < jp_ips.txt
+        fi
+        
+        # 选择JP中延迟最低的10个IP
+        echo "Selecting fastest 10 JP IPs..."
+        sort -n -k2 jp_all_valid.txt | head -10 | cut -d' ' -f1 > filtered_ips.txt
+        
+        echo "Fastest 10 JP IPs:"
+        cat filtered_ips.txt
+        
+        echo -e "\nFinal IP count: $(wc -l < filtered_ips.txt)"
+
+    - name: Display filtered IPs
+      run: |
+        echo "Filtered IP addresses (10 fastest JP):"
+        cat filtered_ips.txt
+        echo -e "\nTotal IPs: $(wc -l < filtered_ips.txt)"
+
+    - name: Commit and push if changed
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        
+        if [ -n "$(git status --porcelain filtered_ips.txt)" ]; then
+          git add filtered_ips.txt
+          git commit -m "Update filtered JP IP list (10 fastest JP) $(date '+%Y-%m-%d %H:%M:%S')"
+          git push origin HEAD:${{ github.ref_name }}
+          echo "Changes committed and pushed"
+        else
+          echo "No changes to commit"
+        fi
