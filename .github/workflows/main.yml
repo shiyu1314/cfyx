@@ -143,12 +143,6 @@ jobs:
           fi
         fi
 
-    - name: Display final results
-      run: |
-        echo "=== FINAL FILTERED IPS ==="
-        cat filtered_ips.txt
-        echo -e "\nTotal IP addresses: $(grep -E '^[0-9]' filtered_ips.txt | wc -l)"
-
     - name: Commit and push if changed
       run: |
         git config user.name "github-actions[bot]"
