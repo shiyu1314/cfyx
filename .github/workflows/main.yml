@@ -34,7 +34,7 @@ jobs:
         echo "JP IPs found: $(wc -l < jp_ips.txt)"
         
         # 如果IP太多，只取前100个测试
-        head -100 jp_ips.txt > jp_ips_limited.txt
+        head -20 jp_ips.txt > jp_ips_limited.txt
         mv jp_ips_limited.txt jp_ips.txt
         echo "Limited to first 100 IPs for testing"
 
