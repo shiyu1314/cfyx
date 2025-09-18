@@ -50,7 +50,10 @@ jobs:
         fi
 
     - name: Check IPs with external API and select fastest
-      run: |    
+      run: |
+        # 初始化最终结果文件
+        > filtered_ips.txt
+        
         # 检查SG IPs
         if [ -s sg_ips.txt ]; then
           sg_total=$(wc -l < sg_ips.txt)
@@ -88,10 +91,7 @@ jobs:
           # 选择最快的10个SG IP并写入最终文件
           if [ -s sg_all_valid.txt ]; then
             sort -n -k2 sg_all_valid.txt | head -10 | cut -d' ' -f1 >> filtered_ips.txt
-          else
-            echo "# No valid SG IPs found" >> filtered_ips.txt
           fi
-          echo "" >> filtered_ips.txt
         fi
 
         # 检查KR IPs
@@ -131,10 +131,20 @@ jobs:
           # 选择最快的10个KR IP并写入最终文件
           if [ -s kr_all_valid.txt ]; then
             sort -n -k2 kr_all_valid.txt | head -10 | cut -d' ' -f1 >> filtered_ips.txt
-          else
-            echo "# No valid KR IPs found" >> filtered_ips.txt
           fi
         fi
+
+        # 显示最终结果统计
+        echo -e "\n=== FINAL RESULTS ==="
+        echo "Valid SG IPs found: $sg_valid"
+        echo "Valid KR IPs found: $kr_valid"
+        echo "Total IPs in final file: $(wc -l < filtered_ips.txt)"
+
+    - name: Display final results
+      run: |
+        echo "=== FINAL FILTERED IPS ==="
+        cat filtered_ips.txt
+        echo -e "\nTotal IP addresses: $(wc -l < filtered_ips.txt)"
 
     - name: Commit and push if changed
       run: |
