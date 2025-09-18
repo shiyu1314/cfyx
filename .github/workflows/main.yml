@@ -143,12 +143,6 @@ jobs:
           fi
         fi
 
-        # 显示最终结果统计
-        echo -e "\n=== FINAL RESULTS ==="
-        echo "Valid SG IPs found: $sg_valid"
-        echo "Valid KR IPs found: $kr_valid"
-        echo "Total IPs in final file: $(grep -E '^[0-9]' filtered_ips.txt | wc -l)"
-
     - name: Display final results
       run: |
         echo "=== FINAL FILTERED IPS ==="
