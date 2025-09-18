@@ -50,15 +50,9 @@ jobs:
         fi
 
     - name: Check IPs with external API and select fastest
-      run: |
-        # 初始化最终结果文件
-        echo "# Fastest SG and KR IPs" > filtered_ips.txt
-        echo "# Generated on $(date '+%Y-%m-%d %H:%M:%S')" >> filtered_ips.txt
-        echo "" >> filtered_ips.txt
-        
+      run: |    
         # 检查SG IPs
         if [ -s sg_ips.txt ]; then
-          echo "# Singapore (SG) IPs:" >> filtered_ips.txt
           sg_total=$(wc -l < sg_ips.txt)
           sg_count=0
           sg_valid=0
@@ -102,7 +96,6 @@ jobs:
 
         # 检查KR IPs
         if [ -s kr_ips.txt ]; then
-          echo "# South Korea (KR) IPs:" >> filtered_ips.txt
           kr_total=$(wc -l < kr_ips.txt)
           kr_count=0
           kr_valid=0
