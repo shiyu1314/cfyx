@@ -29,12 +29,12 @@ jobs:
     - name: Filter SG and KR IPs with port 443
       run: |
         # 严格筛选
-        grep "HK" raw_ips.txt | grep ":443#" | sed 's/:443#.*//' > sg_ips.txt
-        echo "HK IPs found: $(wc -l < sg_ips.txt)"
+        grep "SG" raw_ips.txt | grep ":443#" | sed 's/:443#.*//' > sg_ips.txt
+        echo "SG IPs found: $(wc -l < sg_ips.txt)"
         
-        # 严格筛选KR（韩国）IP  
-        grep "KR" raw_ips.txt | grep ":443#" | sed 's/:443#.*//' > kr_ips.txt
-        echo "KR IPs found: $(wc -l < kr_ips.txt)"
+        # 严格筛选 
+        grep "JP" raw_ips.txt | grep ":443#" | sed 's/:443#.*//' > kr_ips.txt
+        echo "JP IPs found: $(wc -l < kr_ips.txt)"
         
         # 如果IP太多，限制测试数量
         if [ $(wc -l < sg_ips.txt) -gt 20 ]; then
