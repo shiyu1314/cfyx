@@ -1,10 +1,10 @@
-name: Filter SG and KR IPs 
+name: Filter JP IPs 
 
 on:
   schedule:
     - cron: '*/60 * * * *'  
   workflow_dispatch:            
-
+  
 jobs:
   filter-ips:
     runs-on: ubuntu-latest
@@ -16,135 +16,79 @@ jobs:
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Install dependencies
+    - name: Install jq for JSON parsing
       run: |
         sudo apt-get update
-        sudo apt-get install -y jq curl
+        sudo apt-get install -y jq
 
     - name: Fetch IP list
       run: |
         curl -s "https://zip.cm.edu.kg/all.txt" -o raw_ips.txt
         echo "Total IPs fetched: $(wc -l < raw_ips.txt)"
 
-    - name: Filter SG and KR IPs with port 443
+    - name: Filter JP IPs with port 443 only
       run: |
-        # 严格筛选
-        grep "KR" raw_ips.txt | grep ":443#" | sed 's/:443#.*//' > sg_ips.txt
-        echo "KR IPs found: $(wc -l < sg_ips.txt)"
+        # 获取JP的IP
+        grep -E "(SG|US)" raw_ips.txt | grep ":443#" | sed 's/:443#.*//' > jp_ips.txt
         
-        # 严格筛选 
-        grep "HK" raw_ips.txt | grep ":443#" | sed 's/:443#.*//' > kr_ips.txt
-        echo "HK IPs found: $(wc -l < kr_ips.txt)"
+        echo "JP IPs found: $(wc -l < jp_ips.txt)"
         
-        # 如果IP太多，限制测试数量
-        if [ $(wc -l < sg_ips.txt) -gt 20 ]; then
-          head -20 sg_ips.txt > sg_ips_limited.txt
-          mv sg_ips_limited.txt sg_ips.txt
-          echo "Limited SG to first 20 IPs for testing"
-        fi
-        
-        if [ $(wc -l < kr_ips.txt) -gt 20 ]; then
-          head -20 kr_ips.txt > kr_ips_limited.txt
-          mv kr_ips_limited.txt kr_ips.txt
-          echo "Limited KR to first 20 IPs for testing"
-        fi
+        # 如果IP太多，只取前100个测试
+        head -30 jp_ips.txt > jp_ips_limited.txt
+        mv jp_ips_limited.txt jp_ips.txt
+        echo "Limited to first 100 IPs for testing"
 
     - name: Check IPs with external API and select fastest
       run: |
-        # 初始化最终结果文件
-        > filtered_ips.txt
+        # 检查JP IPs - 收集所有有效的IP和响应时间
+        touch jp_all_valid.txt
+        if [ -s jp_ips.txt ]; then
+          jp_total=$(wc -l < jp_ips.txt)
+          jp_count=0
+          jp_valid=0
+          
+          while IFS= read -r ip; do
+            jp_count=$((jp_count + 1))
+            echo "[JP $jp_count/$jp_total] Testing $ip..."
+            
+            # 设置超时时间
+            response=$(timeout 5s curl -s "https://ip.kkki.qzz.io/check?proxyip=$ip" 2>/dev/null || echo "timeout")
+            
+            if [ "$response" != "timeout" ]; then
+              if echo "$response" | jq -e '.success == true' >/dev/null 2>&1; then
+                response_time=$(echo "$response" | jq -r '.responseTime' | grep -Eo '[0-9]+' || echo "9999")
+                echo "  ✓ Valid JP IP, response time: ${response_time}ms"
+                echo "$ip $response_time" >> jp_all_valid.txt
+                jp_valid=$((jp_valid + 1))
+              else
+                echo "  ✗ JP IP discarded (success not true)"
+              fi
+            else
+              echo "  ✗ JP IP discarded (timeout)"
+            fi
+            
+            # 每5个请求休息一下
+            if [ $((jp_count % 5)) -eq 0 ]; then
+              sleep 0.5
+            fi
+            
+          done < jp_ips.txt
+        fi
         
-        # 检查SG IPs
-        if [ -s sg_ips.txt ]; then
-          sg_total=$(wc -l < sg_ips.txt)
-          sg_count=0
-          sg_valid=0
-          touch sg_all_valid.txt
-          
-          while IFS= read -r ip; do
-            sg_count=$((sg_count + 1))
-            echo "[SG $sg_count/$sg_total] Testing $ip..."
-            
-            # 使用外部API检查IP（保持不变）
-            response=$(timeout 5s curl -s "https://ip.kkki.qzz.io/check?proxyip=$ip" 2>/dev/null || echo "timeout")
-            
-            if [ "$response" != "timeout" ]; then
-              if echo "$response" | jq -e '.success == true' >/dev/null 2>&1; then
-                response_time=$(echo "$response" | jq -r '.responseTime' | grep -Eo '[0-9]+' || echo "9999")
-                echo "  ✓ Valid SG IP, response time: ${response_time}ms"
-                echo "$ip $response_time" >> sg_all_valid.txt
-                sg_valid=$((sg_valid + 1))
-              else
-                echo "  ✗ SG IP discarded (success not true)"
-              fi
-            else
-              echo "  ✗ SG IP discarded (timeout)"
-            fi
-            
-            # 每5个请求休息一下
-            if [ $((sg_count % 5)) -eq 0 ]; then
-              sleep 0.5
-            fi
-            
-          done < sg_ips.txt
-          
-          # 选择最快的10个SG IP并写入最终文件
-          if [ -s sg_all_valid.txt ]; then
-            sort -n -k2 sg_all_valid.txt | head -10 | cut -d' ' -f1 >> filtered_ips.txt
-          fi
-        fi
-
-        # 检查KR IPs
-        if [ -s kr_ips.txt ]; then
-          kr_total=$(wc -l < kr_ips.txt)
-          kr_count=0
-          kr_valid=0
-          touch kr_all_valid.txt
-          
-          while IFS= read -r ip; do
-            kr_count=$((kr_count + 1))
-            echo "[KR $kr_count/$kr_total] Testing $ip..."
-            
-            # 使用外部API检查IP（保持不变）
-            response=$(timeout 5s curl -s "https://ip.kkki.qzz.io/check?proxyip=$ip" 2>/dev/null || echo "timeout")
-            
-            if [ "$response" != "timeout" ]; then
-              if echo "$response" | jq -e '.success == true' >/dev/null 2>&1; then
-                response_time=$(echo "$response" | jq -r '.responseTime' | grep -Eo '[0-9]+' || echo "9999")
-                echo "  ✓ Valid KR IP, response time: ${response_time}ms"
-                echo "$ip $response_time" >> kr_all_valid.txt
-                kr_valid=$((kr_valid + 1))
-              else
-                echo "  ✗ KR IP discarded (success not true)"
-              fi
-            else
-              echo "  ✗ KR IP discarded (timeout)"
-            fi
-            
-            # 每5个请求休息一下
-            if [ $((kr_count % 5)) -eq 0 ]; then
-              sleep 0.5
-            fi
-            
-          done < kr_ips.txt
-          
-          # 选择最快的10个KR IP并写入最终文件
-          if [ -s kr_all_valid.txt ]; then
-            sort -n -k2 kr_all_valid.txt | head -10 | cut -d' ' -f1 >> filtered_ips.txt
-          fi
-        fi
-
-        # 显示最终结果统计
-        echo -e "\n=== FINAL RESULTS ==="
-        echo "Valid SG IPs found: $sg_valid"
-        echo "Valid KR IPs found: $kr_valid"
-        echo "Total IPs in final file: $(wc -l < filtered_ips.txt)"
-
-    - name: Display final results
-      run: |
-        echo "=== FINAL FILTERED IPS ==="
+        # 选择JP中延迟最低的10个IP
+        echo "Selecting fastest 10 JP IPs..."
+        sort -n -k2 jp_all_valid.txt | head -10 | cut -d' ' -f1 > filtered_ips.txt
+        
+        echo "Fastest 10 JP IPs:"
         cat filtered_ips.txt
-        echo -e "\nTotal IP addresses: $(wc -l < filtered_ips.txt)"
+        
+        echo -e "\nFinal IP count: $(wc -l < filtered_ips.txt)"
+
+    - name: Display filtered IPs
+      run: |
+        echo "Filtered IP addresses (10 fastest JP):"
+        cat filtered_ips.txt
+        echo -e "\nTotal IPs: $(wc -l < filtered_ips.txt)"
 
     - name: Commit and push if changed
       run: |
@@ -153,7 +97,7 @@ jobs:
         
         if [ -n "$(git status --porcelain filtered_ips.txt)" ]; then
           git add filtered_ips.txt
-          git commit -m "Update filtered SG and KR IP lists - $(date '+%Y-%m-%d %H:%M:%S')"
+          git commit -m "Update filtered JP IP list (10 fastest JP) $(date '+%Y-%m-%d %H:%M:%S')"
           git push origin HEAD:${{ github.ref_name }}
           echo "Changes committed and pushed"
         else
