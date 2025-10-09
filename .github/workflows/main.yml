@@ -4,7 +4,7 @@ on:
   schedule:
     - cron: '*/60 * * * *'  
   workflow_dispatch:            
-  
+
 jobs:
   filter-ips:
     runs-on: ubuntu-latest
@@ -29,7 +29,7 @@ jobs:
     - name: Filter JP IPs with port 443 only
       run: |
         # 获取JP的IP
-        grep -E "(CA)" raw_ips.txt | grep ":443#" | sed 's/:8443#.*//' > jp_ips.txt
+        grep -E "(CA)" raw_ips.txt | grep ":8443#" | sed 's/:8443#.*//' > jp_ips.txt
         
         echo "JP IPs found: $(wc -l < jp_ips.txt)"
         
