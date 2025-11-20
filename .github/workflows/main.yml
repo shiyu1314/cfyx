@@ -29,7 +29,7 @@ jobs:
     - name: Filter JP IPs with port 443 only
       run: |
         # 获取JP的IP
-        grep -E "(HK)" raw_ips.txt | grep ":2053#" | sed 's/:2053#.*//' > jp_ips.txt
+        grep -E "(NL)" raw_ips.txt | grep ":2053#" | sed 's/:2053#.*//' > jp_ips.txt
         
         echo "JP IPs found: $(wc -l < jp_ips.txt)"
         
