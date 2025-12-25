@@ -12,8 +12,7 @@ api_tokens = [token.strip() for token in cf_tokens_str.split(",") if token.strip
 # 如果只配置了 v4 则只处理 IPv4；如果同时配置了 v4 与 v6，则分别处理
 subdomain_configs = {
     "yx": {
-        "v4": "https://github.com/beiye935/YouXuanIPAndYuming/raw/refs/heads/main/YouXuanIPv4.txt",
-        "v6": "https://github.com/beiye935/YouXuanIPAndYuming/raw/refs/heads/main/YouXuanIPv6.txt"
+        "v4": "https://github.com/beiye935/YouXuanIPAndYuming/raw/refs/heads/main/YouXuanIPv4.txt"
     },
     "py": {
         "v4": "https://raw.githubusercontent.com/shiyu1314/cfyx/main/filtered_ips.txt"
@@ -23,8 +22,7 @@ subdomain_configs = {
 
 # 固定 DNS 记录类型映射，不作为配置项
 dns_record_map = {
-    "v4": "A",
-    "v6": "AAAA"
+    "v4": "A"
 }
 
 # 获取指定 URL 的 IP 列表，返回所有IP
