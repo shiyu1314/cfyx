@@ -12,7 +12,7 @@ api_tokens = [token.strip() for token in cf_tokens_str.split(",") if token.strip
 # 如果只配置了 v4 则只处理 IPv4；如果同时配置了 v4 与 v6，则分别处理
 subdomain_configs = {
     "yx": {
-        "v4": "https://raw.githubusercontent.com/ymyuuu/IPDB/refs/heads/main/BestCF/bestcfv4.txt"
+        "v4": "https://github.com/camel52zhang/yxip/raw/refs/heads/main/ip.txt"
     },
     "py": {
         "v4": "https://raw.githubusercontent.com/shiyu1314/cfyx/main/filtered_ips.txt"
