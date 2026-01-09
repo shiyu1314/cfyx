@@ -2,7 +2,7 @@ name: 更新 UpBestIP
 
 on:
   schedule:
-    - cron: '*/300 * * * *'  
+    - cron: '*/250 * * * *'  
   workflow_dispatch:            
 
 jobs:
