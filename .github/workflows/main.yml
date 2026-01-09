@@ -2,7 +2,7 @@ name: Filter JP IPs
 
 on:
   schedule:
-    - cron: '*/60 * * * *'  
+    - cron: '*/230 * * * *'  
   workflow_dispatch:            
 
 jobs:
