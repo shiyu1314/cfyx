@@ -13,7 +13,7 @@ jobs:
 
       - name: Filter Best IPs
         run: |
-          curl -s "https://zip.cm.edu.kg/all.txt" | grep "FR" | grep ":2087#" | sed 's/:2087#.*//' | head -30 > raw.txt
+          curl -s "https://zip.cm.edu.kg/all.txt" | grep "DE" | grep ":2087#" | sed 's/:2087#.*//' | head -30 > raw.txt
           touch filtered_ips.txt
           while IFS= read -r ip; do
             res=$(timeout 5s curl -s "https://ip.kkki.qzz.io/check?proxyip=$ip" || echo "fail")
