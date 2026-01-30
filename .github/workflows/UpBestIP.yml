@@ -23,7 +23,7 @@ jobs:
             fi
           done < raw.txt
           [ -f valid.txt ] && sort -n -k2 valid.txt | head -10 | cut -d' ' -f1 > filtered_ips.txt
-          curl -s "https://raw.githubusercontent.com/gslege/CloudflareIP/refs/heads/main/NL.txt" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' > yx.txt
+          curl -s "https://raw.githubusercontent.com/cys92096/cfipcaiji/refs/heads/main/ip.txt" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' > yx.txt
 
       # 设置 Python 环境
       - name: 设置 Python 环境
