@@ -1,0 +1,42 @@
+name: Auto Update DNS (No Storage)
+
+on:
+  schedule:
+    - cron: '0 */70 * * *'
+  workflow_dispatch:
+
+jobs:
+  run-task:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Filter Best IPs
+        run: |
+          curl -s "${{ secrets.IP_SOURCE_URL }}" | grep -E "NL" | grep ":2096#" | sed 's/:2096#.*//' | head -30 > raw.txt
+          touch filtered_ips.txt
+          while IFS= read -r ip; do
+            res=$(timeout 10s curl -s "${{ secrets.PY }}/check?proxyip=$ip:2096" || echo "fail")
+            if [[ "$res" != "fail" ]] && echo "$res" | jq -e '.success == true' >/dev/null 2>&1; then
+              ms=$(echo "$res" | jq -r '.responseTime' | grep -Eo '[0-9]+' || echo "9999")
+              echo "$ip $ms" >> valid.txt
+            fi
+          done < raw.txt
+          [ -f valid.txt ] && sort -n -k2 valid.txt | head -5 | cut -d' ' -f1 > filtered_ips.txt
+          curl -s "${{ secrets.YXIP }}" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' > yx.txt
+
+      # 设置 Python 环境
+      - name: 设置 Python 环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'  # 可根据需要指定 Python 版本，例如 3.8
+
+      # 安装依赖
+      - name: 安装依赖
+        run: pip install requests
+
+      # 运行更新 DNS 的 Python 脚本
+      - name: 更新 BestIP
+        run: python .github/workflows/UpBestIP.py
+        env:
+          CF_TOKENS: ${{ secrets.CF_TOKENS }} 
