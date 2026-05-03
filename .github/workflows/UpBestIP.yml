@@ -13,10 +13,10 @@ jobs:
 
       - name: Filter Best IPs
         run: |
-          curl -s "${{ secrets.IP_SOURCE_URL }}" | grep -E "DE" | grep ":2087#" | sed 's/:2087#.*//' | head -30 > raw.txt
+          curl -s "${{ secrets.IP_SOURCE_URL }}" | grep -E "HK" | grep ":443#" | sed 's/:443#.*//' | head -30 > raw.txt
           touch filtered_ips.txt
           while IFS= read -r ip; do
-            res=$(timeout 10s curl -s "${{ secrets.PY }}/check?proxyip=$ip:2087" || echo "fail")
+            res=$(timeout 10s curl -s "${{ secrets.PY }}/check?proxyip=$ip:443" || echo "fail")
             if [[ "$res" != "fail" ]] && echo "$res" | jq -e '.success == true' >/dev/null 2>&1; then
               ms=$(echo "$res" | jq -r '.responseTime' | grep -Eo '[0-9]+' || echo "9999")
               echo "$ip $ms" >> valid.txt
