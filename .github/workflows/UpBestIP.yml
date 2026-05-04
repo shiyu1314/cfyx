@@ -13,7 +13,7 @@ jobs:
 
       - name: Filter Best IPs
         run: |
-          curl -s "${{ secrets.IP_SOURCE_URL }}" | grep -E "SG" | grep ":443#" | sed 's/:443#.*//' | head -30 > raw.txt
+          curl -s "${{ secrets.IP_SOURCE_URL }}" | grep -E "KR" | grep ":443#" | sed 's/:443#.*//' | head -30 > raw.txt
           touch filtered_ips.txt
           while IFS= read -r ip; do
             res=$(timeout 10s curl -s "${{ secrets.PY }}/check?proxyip=$ip:443" || echo "fail")
