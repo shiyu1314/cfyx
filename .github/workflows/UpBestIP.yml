@@ -2,7 +2,7 @@ name: Auto Update DNS (No Storage)
 
 on:
   schedule:
-    - cron: '0 */31 * * *'
+    - cron: '0 */35 * * *'
   workflow_dispatch:
 
 jobs:
