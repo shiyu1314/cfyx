@@ -3,7 +3,6 @@ import os, requests
 CF_TOKENS = [t.strip() for t in os.getenv("CF_TOKENS", "").split(",") if t.strip()]
 # yx 读远程，py 读刚才生成的本地文件
 CONFIGS = {
-    "yx": "yx.txt",
     "py": "filtered_ips.txt" 
 }
 
