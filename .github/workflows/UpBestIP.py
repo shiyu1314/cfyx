@@ -1,7 +1,6 @@
 import os, requests
 
 CF_TOKENS = [t.strip() for t in os.getenv("CF_TOKENS", "").split(",") if t.strip()]
-# yx 读远程，py 读刚才生成的本地文件
 CONFIGS = {
     "py": "filtered_ips.txt" 
 }
@@ -35,6 +34,14 @@ def main():
                     cf_api(f"zones/{z_id}/dns_records", token, "POST", 
                            {"type": "A", "name": full_name, "content": ip, "ttl": 60})
                     print(f"成功: {full_name} -> {ip}")
+
+            # 清除该 Zone 的所有缓存
+            purge_res = cf_api(f"zones/{z_id}/purge_cache", token, "POST", {"purge_everything": True})
+            if purge_res.get("success"):
+                print(f"成功清除缓存: {z_name}")
+            else:
+                print(f"清除缓存失败: {purge_res.get('errors')}")
+
         except Exception as e:
             print(f"同步失败: {e}")
 
