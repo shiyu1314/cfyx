@@ -11,24 +11,50 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 筛选最高质量 IP（结合 API 延迟 + Ping 延迟 + 丢包率综合评分）
       - name: Filter Best IPs
         run: |
-          curl -s "${{ secrets.IP_SOURCE_URL }}" | grep -E "FR" | grep ":2096#" | sed 's/:2096#.*//' | head -30 > raw.txt
-          touch filtered_ips.txt
+          curl -s "${{ secrets.IP_SOURCE_URL }}" | grep -E "DE" | grep ":2096#" | sed 's/:2096#.*//' | head -50 > raw.txt
+          touch valid.txt filtered_ips.txt
+
           while IFS= read -r ip; do
-            res=$(timeout 10s curl -s "${{ secrets.PY }}/check?proxyip=$ip:2096" || echo "fail")
-            if [[ "$res" != "fail" ]] && echo "$res" | jq -e '.success == true' >/dev/null 2>&1; then
-              ms=$(echo "$res" | jq -r '.responseTime' | grep -Eo '[0-9]+' || echo "9999")
-              echo "$ip $ms" >> valid.txt
+            [ -z "$ip" ] && continue
+
+            # 1. 代理 API 响应检测
+            res=$(timeout 8s curl -s "${{ secrets.PY }}/check?proxyip=$ip:2096" || echo "fail")
+            if [[ "$res" == "fail" ]] || ! echo "$res" | jq -e '.success == true' >/dev/null 2>&1; then
+              continue
             fi
+            api_ms=$(echo "$res" | jq -r '.responseTime' | grep -Eo '[0-9]+' || echo "9999")
+
+            # 2. 网络丢包率与 Ping 延迟检测 (发 3 个包，超时 2s)
+            ping_stat=$(ping -c 3 -W 2 "$ip" 2>/dev/null || true)
+            pkt_loss=$(echo "$ping_stat" | grep -oP '\d+(?=% packet loss)' || echo "100")
+            avg_ping=$(echo "$ping_stat" | tail -1 | awk -F'/' '{print $5}' | cut -d'.' -f1 || echo "999")
+
+            # 过滤高丢包率节点（丢包率 > 33% 直接剔除）
+            if [ "$pkt_loss" -gt 33 ]; then
+              continue
+            fi
+
+            # 3. 计算综合质量评分（分值越低越优：API延迟*0.4 + Ping*0.3 + 丢包率*10）
+            score=$(( (api_ms * 4 / 10) + (avg_ping * 3 / 10) + (pkt_loss * 10) ))
+
+            echo "$ip $score $api_ms ${pkt_loss}%" >> valid.txt
           done < raw.txt
-          [ -f valid.txt ] && sort -n -k2 valid.txt | head -10 | cut -d' ' -f1 > filtered_ips.txt
+
+          # 按综合质量得分升序排序，提取质量最高的前 10 个 IP
+          if [ -s valid.txt ]; then
+            sort -n -k2 valid.txt | head -10 | cut -d' ' -f1 > filtered_ips.txt
+            echo "已筛选出最高质量 IP 列表："
+            cat filtered_ips.txt
+          fi
 
       # 设置 Python 环境
       - name: 设置 Python 环境
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'  # 可根据需要指定 Python 版本，例如 3.8
+          python-version: '3.x'
 
       # 安装依赖
       - name: 安装依赖
@@ -38,8 +64,9 @@ jobs:
       - name: 更新 BestIP
         run: python .github/workflows/UpBestIP.py
         env:
-          CF_TOKENS: ${{ secrets.CF_TOKENS }} 
-          
+          CF_TOKENS: ${{ secrets.CF_TOKENS }}
+
+      # 自动清理历史工作流运行记录
       - name: Invoke workflow without inputs
         uses: benc-uk/workflow-dispatch@v1
         with:
