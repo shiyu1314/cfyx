@@ -2,7 +2,7 @@ name: Auto Update DNS (No Storage)
 
 on:
   schedule:
-    - cron: '*/30 6-23,0 * * *'
+    - cron: '*/120 6-23,0 * * *'
       timezone: 'Asia/Shanghai'
   workflow_dispatch:
 
